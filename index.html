@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>Fuel Split</title>
+<style>
+/* One narrow column, no cards. The answer (what each person pays) is the biggest thing on the page. */
+:root {
+  --bg: #FFFFFF; --ink: #111111; --muted: #6B6B6B; --line: #E4E4E4;
+  --btn: #111111; --btn-ink: #FFFFFF; --owe: #B3401A; --live: #0B7A4B;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0E0E0E; --ink: #F2F2F2; --muted: #9A9A9A; --line: #262626; --btn: #F2F2F2; --btn-ink: #0E0E0E; --owe: #F0956B; --live: #4ADE9B; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 16px; line-height: 1.45;
+  padding: max(28px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(56px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+}
+.wrap { max-width: 480px; margin-inline: auto; display: flex; flex-direction: column; gap: 28px; }
+h1, h2 { font-size: 15px; font-weight: 600; margin: 0; }
+p { margin: 0; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.hint { color: var(--muted); font-size: 13.5px; }
+.muted { color: var(--muted); }
+
+header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.sync { font-size: 12px; color: var(--muted); }
+.tabs { display: flex; gap: 20px; }
+.tabs button { font: inherit; font-size: 15px; color: var(--muted); background: none; border: 0; padding: 0 0 4px; cursor: pointer; border-bottom: 1.5px solid transparent; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+.panel { display: flex; flex-direction: column; gap: 24px; }
+.panel[hidden] { display: none; }
+.block { display: flex; flex-direction: column; gap: 10px; }
+
+.result .big { font-family: var(--mono); font-size: 56px; line-height: 1; letter-spacing: -0.02em; }
+.result .label { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.result .hint { margin-top: 8px; }
+
+input[type="text"], input[type="number"], input[type="date"], select {
+  font: inherit; font-size: 16px; color: var(--ink); background: transparent; width: 100%; min-width: 0;
+  border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 8px 0;
+}
+input.mono { font-family: var(--mono); }
+input::placeholder { color: var(--muted); opacity: .7; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.field > label, .field > .lbl { font-size: 12.5px; color: var(--muted); }
+.row { display: flex; gap: 16px; align-items: end; flex-wrap: wrap; }
+.row > .field { flex: 1 1 120px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14.5px; cursor: pointer; }
+.check input { width: 17px; height: 17px; accent-color: var(--ink); margin: 0; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: inherit; font-size: 15px; cursor: pointer; border-radius: 999px; padding: 6px 14px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--btn); border-color: var(--btn); color: var(--btn-ink); }
+
+button.btn { font: inherit; font-weight: 500; cursor: pointer; border-radius: 8px; padding: 12px 16px; border: 1px solid var(--btn); background: var(--btn); color: var(--btn-ink); }
+button.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+button.link { font: inherit; font-size: 14px; cursor: pointer; background: none; border: 0; padding: 0; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+button.link[data-armed="1"] { color: var(--owe); }
+.status { min-height: 1.3em; font-size: 13.5px; color: var(--muted); }
+
+/* GPS */
+.trip { display: flex; flex-direction: column; gap: 8px; }
+.trip .live { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.trip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); }
+.trip.on .dot { animation: pulse 1.4s ease-in-out infinite; }
+.trip .actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+@keyframes pulse { 50% { opacity: .25; } }
+
+.seg { display: inline-flex; gap: 16px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { cursor: pointer; color: var(--muted); padding: 4px 0; border-bottom: 1.5px solid transparent; font-size: 15px; }
+.seg input:checked + label { color: var(--ink); border-bottom-color: var(--ink); }
+.seg input:focus-visible + label { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+details { border-top: 1px solid var(--line); padding-top: 14px; }
+summary { cursor: pointer; font-size: 14px; color: var(--muted); list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: " +"; }
+details[open] summary::after { content: " –"; }
+details .body { display: flex; flex-direction: column; gap: 16px; padding-top: 16px; }
+
+.list { display: flex; flex-direction: column; }
+.item { display: flex; align-items: baseline; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.item:first-child { border-top: 0; }
+.item .main { flex: 1 1 140px; min-width: 0; }
+.item .name { font-weight: 500; overflow-wrap: anywhere; }
+.item .meta { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.amt { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+.owes { color: var(--owe); }
+.dim { color: var(--muted); }
+.total .big { font-family: var(--mono); font-size: 40px; line-height: 1; }
+.empty { color: var(--muted); font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { .trip.on .dot { animation: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fuel Split</h1>
+    <span class="sync" id="sync">Saved on this device</span>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="t-journey" data-tab="journey" aria-selected="true" aria-controls="p-journey">Journey</button>
+    <button role="tab" id="t-balances" data-tab="balances" aria-selected="false" aria-controls="p-balances">Balances</button>
+    <button role="tab" id="t-history" data-tab="history" aria-selected="false" aria-controls="p-history">History</button>
+  </nav>
+
+  <!-- JOURNEY -->
+  <section class="panel" id="p-journey" role="tabpanel" aria-labelledby="t-journey">
+    <div class="result" aria-live="polite">
+      <div class="label">Each person pays</div>
+      <div class="big" id="rEach">£0.00</div>
+      <p class="hint" id="rLine">Start a trip or enter the miles.</p>
+    </div>
+
+    <div class="trip" id="trip">
+      <div class="live" id="tripLive" hidden><span class="dot"></span><span id="tripText"></span></div>
+      <div class="actions" id="tripActions"></div>
+      <p class="hint" id="tripHint">Tracks distance by GPS while this page is open. Keep the screen on.</p>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="miles">Miles, one way</label>
+        <input type="number" class="mono" id="miles" inputmode="decimal" min="0" step="0.1" placeholder="12.5">
+      </div>
+      <label class="check"><input type="checkbox" id="ret"> Return trip</label>
+    </div>
+
+    <div class="block">
+      <span class="muted" id="ridersLbl">Who was in the car</span>
+      <div class="chips" id="riders" role="group" aria-labelledby="ridersLbl"></div>
+      <div class="row">
+        <div class="field"><input type="text" id="newPerson" placeholder="Add a person" aria-label="Add a person" autocomplete="off"></div>
+        <button class="link" id="addPerson" type="button">Add</button>
+      </div>
+      <label class="check"><input type="checkbox" id="incMe" checked> Include me in the split</label>
+    </div>
+
+    <div class="block">
+      <button class="btn" id="addJourney" type="button">Add journey</button>
+      <div class="status" id="toast" role="status"></div>
+    </div>
+
+    <details>
+      <summary id="carSummary">Details</summary>
+      <div class="body">
+        <div class="row">
+          <div class="field"><label for="label">Where to (optional)</label><input type="text" id="label" placeholder="Brighton" autocomplete="off"></div>
+          <div class="field"><label for="date">Date</label><input type="date" id="date"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="car">Car</label><select id="car"></select></div>
+          <button class="link" id="newCarBtn" type="button">New car</button>
+        </div>
+        <div class="row" id="newCarRow" hidden>
+          <div class="field"><input type="text" id="newCarName" placeholder="Car name" aria-label="New car name"></div>
+          <div class="field" style="flex:0 1 80px"><input type="number" class="mono" id="newCarMpg" placeholder="mpg" inputmode="decimal" min="1" step="0.1" aria-label="New car mpg"></div>
+          <button class="link" id="newCarAdd" type="button">Add</button>
+        </div>
+        <div class="field">
+          <span class="lbl" id="fuelLbl">Fuel</span>
+          <div class="seg" role="radiogroup" aria-labelledby="fuelLbl">
+            <input type="radio" name="fuel" id="fuelPetrol" value="petrol"><label for="fuelPetrol">Petrol</label>
+            <input type="radio" name="fuel" id="fuelDiesel" value="diesel"><label for="fuelDiesel">Diesel</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="mpg">mpg (UK)</label><input type="number" class="mono" id="mpg" inputmode="decimal" min="1" step="0.1"></div>
+          <div class="field"><label for="price">Pence per litre</label><input type="number" class="mono" id="price" inputmode="decimal" min="1" step="0.1"></div>
+        </div>
+        <div class="block">
+          <button class="link" id="useAvg" type="button" style="align-self:flex-start">Use UK average</button>
+          <p class="hint" id="avgHint"></p>
+        </div>
+        <div class="block">
+          <div class="row" style="gap:20px">
+            <button class="link" id="exportBtn" type="button">Back up data</button>
+            <button class="link" id="importBtn" type="button">Restore backup</button>
+            <input type="file" id="importFile" accept="application/json,.json" hidden>
+          </div>
+          <div class="status" id="backupStatus" role="status"></div>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <!-- BALANCES -->
+  <section class="panel" id="p-balances" role="tabpanel" aria-labelledby="t-balances" hidden>
+    <div class="total">
+      <div class="muted">Owed to you</div>
+      <div class="big" id="owedTotal">£0.00</div>
+      <p class="hint" id="owedNote"></p>
+    </div>
+    <div class="list" id="people"></div>
+    <div class="block">
+      <h2>Record a payment</h2>
+      <div class="row">
+        <div class="field"><label for="payPerson">From</label><select id="payPerson"></select></div>
+        <div class="field" style="flex:0 1 110px"><label for="payAmt">Amount £</label><input type="number" class="mono" id="payAmt" inputmode="decimal" min="0" step="0.01" placeholder="5.00"></div>
+      </div>
+      <div class="field"><label for="payNote">Note (optional)</label><input type="text" id="payNote" placeholder="Cash" autocomplete="off"></div>
+      <button class="btn" id="payBtn" type="button" style="align-self:flex-start">Take it off their balance</button>
+      <div class="status" id="payToast" role="status"></div>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section class="panel" id="p-history" role="tabpanel" aria-labelledby="t-history" hidden>
+    <div class="block"><h2>Journeys</h2><div class="list" id="jList"></div></div>
+    <div class="block"><h2>Payments</h2><div class="list" id="pList"></div></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var KEY = 'fuelsplit.v1';
+  var TRIP_KEY = 'fuelsplit.trip';
+  var LITRES_PER_GALLON = 4.54609;
+  var METRES_PER_MILE = 1609.344;
+  /* UK average pump prices, pence per litre. Update these, or point PRICE_URL at a small
+     endpoint that returns {"petrol":174.9,"diesel":199.5} (see README). */
+  var AVG = { petrol: 174.9, diesel: 199.5 };
+  var AVG_DATE = 'week to 5 Oct 2026';
+  var PRICE_URL = null;
+
+  function uid() { return Math.random().toString(36).slice(2, 9); }
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function gbp(p) { return (p < 0 ? '-' : '') + '£' + (Math.abs(p) / 100).toFixed(2); }
+  function today() {
+    var d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  }
+  function shortDate(s) {
+    var d = new Date(s + 'T12:00:00');
+    return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  function blank() {
+    return {
+      v: 1, carId: 'c1',
+      cars: [{ id: 'c1', name: 'My car', mpg: 40, fuel: 'petrol' }],
+      prices: { petrol: AVG.petrol, diesel: AVG.diesel },
+      people: [], journeys: [], payments: []
+    };
+  }
+  function normalize(d) {
+    var b = blank();
+    var s = Object.assign(b, d || {});
+    s.prices = Object.assign({ petrol: AVG.petrol, diesel: AVG.diesel }, (d && d.prices) || {});
+    ['cars', 'people', 'journeys', 'payments'].forEach(function (k) {
+      if (!Array.isArray(s[k])) s[k] = blank()[k];
+    });
+    if (!s.cars.length) s.cars = blank().cars;
+    if (!s.cars.some(function (c) { return c.id === s.carId; })) s.carId = s.cars[0].id;
+    return s;
+  }
+
+  var state;
+  try { state = normalize(JSON.parse(lsGet(KEY))); } catch (e) { state = blank(); }
+  var selected = new Set();
+  var saveTimer = null, toastTimer = null, payTimer = null;
+
+  function car() { return state.cars.filter(function (c) { return c.id === state.carId; })[0] || state.cars[0]; }
+  function personName(id) {
+    var p = state.people.filter(function (x) { return x.id === id; })[0];
+    return p ? p.name : 'Someone';
+  }
+  function save() {
+    if (lsSet(KEY, JSON.stringify(state))) $('sync').textContent = 'Saved on this device';
+    else $('sync').textContent = 'Could not save (storage blocked)';
+  }
+  function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(save, 400); }
+
+  /* ---------- maths ---------- */
+  function quote() {
+    var c = car();
+    var miles = (parseFloat($('miles').value) || 0) * ($('ret').checked ? 2 : 1);
+    var mpg = c.mpg, ppl = state.prices[c.fuel];
+    var litres = mpg > 0 ? miles / mpg * LITRES_PER_GALLON : 0;
+    var cost = Math.round(litres * ppl);
+    var riders = Array.from(selected).filter(function (id) {
+      return state.people.some(function (p) { return p.id === id; });
+    });
+    var inc = $('incMe').checked;
+    return { miles: miles, mpg: mpg, ppl: ppl, litres: litres, cost: cost, riders: riders, inc: inc, n: riders.length + (inc ? 1 : 0) };
+  }
+  function shares(q) {
+    var map = {}, mine = 0;
+    if (!q.n) return { map: map, mine: mine };
+    var base = Math.floor(q.cost / q.n);
+    var rem = q.cost - base * q.n;
+    var order = (q.inc ? ['__me'] : []).concat(q.riders);
+    order.forEach(function (id) {
+      var s = base + (rem > 0 ? 1 : 0);
+      if (rem > 0) rem--;
+      if (id === '__me') mine = s; else map[id] = s;
+    });
+    return { map: map, mine: mine };
+  }
+  function balances() {
+    var m = {};
+    state.people.forEach(function (p) { m[p.id] = { owed: 0, paid: 0, trips: 0 }; });
+    state.journeys.forEach(function (j) {
+      Object.keys(j.shares || {}).forEach(function (id) {
+        if (m[id]) { m[id].owed += j.shares[id]; m[id].trips++; }
+      });
+    });
+    state.payments.forEach(function (p) { if (m[p.personId]) m[p.personId].paid += p.amount; });
+    return m;
+  }
+
+  /* ---------- rendering ---------- */
+  function renderCar() {
+    var c = car();
+    $('car').innerHTML = state.cars.map(function (x) {
+      return '<option value="' + esc(x.id) + '">' + esc(x.name) + '</option>';
+    }).join('');
+    $('car').value = c.id;
+    $('fuelPetrol').checked = c.fuel === 'petrol';
+    $('fuelDiesel').checked = c.fuel === 'diesel';
+    if (document.activeElement !== $('mpg')) $('mpg').value = c.mpg;
+    if (document.activeElement !== $('price')) $('price').value = state.prices[c.fuel];
+    $('carSummary').textContent = c.name + ' · ' + c.mpg + ' mpg · ' + c.fuel + ' ' + state.prices[c.fuel] + 'p';
+    $('avgHint').textContent = 'UK average, ' + AVG_DATE + ': petrol ' + AVG.petrol + 'p, diesel ' + AVG.diesel + 'p. Change it to what you paid at the pump.';
+  }
+  function renderRiders() {
+    $('riders').innerHTML = state.people.map(function (p) {
+      return '<button type="button" class="chip" data-id="' + esc(p.id) + '" aria-pressed="' + selected.has(p.id) + '">' + esc(p.name) + '</button>';
+    }).join('') || '<span class="hint">Add a friend below, then tap their name.</span>';
+  }
+  function renderReceipt() {
+    var q = quote();
+    var has = q.miles > 0 && q.mpg > 0 && q.ppl > 0;
+    var s = shares(q);
+    var each = q.riders.length ? s.map[q.riders[0]] : (q.inc ? s.mine : 0);
+    $('rEach').textContent = has && q.n ? gbp(each) : '£0.00';
+    var line;
+    if (!has) line = 'Start a trip or enter the miles.';
+    else if (!q.n) line = gbp(q.cost) + ' of fuel. Tap who was in the car.';
+    else line = gbp(q.cost) + ' of fuel · ' + q.litres.toFixed(1) + ' L · ' + q.miles.toFixed(1) + ' mi · ' + q.n + (q.n === 1 ? ' person' : ' ways');
+    $('rLine').textContent = line;
+  }
+  function renderBalances() {
+    var m = balances();
+    var total = 0, count = 0;
+    var html = state.people.map(function (p) {
+      var b = m[p.id];
+      var net = b.owed - b.paid;
+      if (net > 0) { total += net; count++; }
+      var cls = net > 0 ? 'owes' : 'dim';
+      var label = net > 0 ? gbp(net) : net < 0 ? gbp(-net) + ' ahead' : 'Settled';
+      var meta = b.trips + (b.trips === 1 ? ' journey' : ' journeys') + ' · ' + gbp(b.paid) + ' paid';
+      return '<div class="item"><div class="main"><div class="name">' + esc(p.name) + '</div><div class="meta">' + meta + '</div></div>' +
+        '<div class="amt ' + cls + '">' + label + '</div>' +
+        (net > 0 ? '<button type="button" class="link" data-act="settle" data-id="' + esc(p.id) + '">Settle</button>' : '') + '</div>';
+    }).join('');
+    $('people').innerHTML = html || '<p class="empty">No one yet. Add people on the Journey tab.</p>';
+    $('owedTotal').textContent = gbp(total);
+    $('owedNote').textContent = count ? 'from ' + count + (count === 1 ? ' person' : ' people') : 'Nobody owes anything.';
+    var ps = $('payPerson'), cur = ps.value;
+    ps.innerHTML = state.people.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('');
+    if (cur && state.people.some(function (p) { return p.id === cur; })) ps.value = cur;
+  }
+  function renderHistory() {
+    var js = state.journeys.slice().reverse().sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
+    $('jList').innerHTML = js.map(function (j) {
+      var who = Object.keys(j.shares || {}).map(personName);
+      if (j.inc) who.unshift('You');
+      return '<div class="item"><div class="main"><div class="name">' + esc(j.label) + '</div>' +
+        '<div class="meta">' + shortDate(j.date) + ' · ' + j.miles.toFixed(1) + ' mi' + (j.ret ? ' return' : '') + (j.gps ? ' · GPS' : '') + ' · ' + esc(who.join(', ')) + '</div></div>' +
+        '<div class="amt">' + gbp(j.cost) + '</div>' +
+        '<button type="button" class="link" data-act="del-journey" data-id="' + esc(j.id) + '">Delete</button></div>';
+    }).join('') || '<p class="empty">No journeys yet.</p>';
+    $('pList').innerHTML = state.payments.slice().reverse().map(function (p) {
+      return '<div class="item"><div class="main"><div class="name">' + esc(personName(p.personId)) + '</div>' +
+        '<div class="meta">' + shortDate(p.date) + (p.note ? ' · ' + esc(p.note) : '') + '</div></div>' +
+        '<div class="amt">' + gbp(p.amount) + '</div>' +
+        '<button type="button" class="link" data-act="del-payment" data-id="' + esc(p.id) + '">Delete</button></div>';
+    }).join('') || '<p class="empty">No payments yet.</p>';
+  }
+  function renderAll() { renderCar(); renderRiders(); renderReceipt(); renderBalances(); renderHistory(); renderTrip(); }
+
+  function say(id, msg, which) {
+    var el = $(id);
+    el.textContent = msg;
+    clearTimeout(which === 'pay' ? payTimer : toastTimer);
+    var t = setTimeout(function () { el.textContent = ''; }, 5000);
+    if (which === 'pay') payTimer = t; else toastTimer = t;
+  }
+
+  /* ---------- GPS trip ---------- */
+  // trip = { dist (metres), last: {lat,lng,t} | null, startedAt, points }
+  var trip = null;
+  var watchId = null;
+  var wakeLock = null;
+  var tripGps = false;      // true if the miles box came from GPS
+  var accNow = null;        // latest GPS accuracy in metres
+  var tripError = '';
+
+  function loadTrip() {
+    try { var t = JSON.parse(lsGet(TRIP_KEY)); if (t && typeof t.dist === 'number') { t.last = null; return t; } } catch (e) {}
+    return null;
+  }
+  function saveTrip() { if (trip) lsSet(TRIP_KEY, JSON.stringify(trip)); }
+
+  function haversine(a, b) {
+    var R = 6371000, r = Math.PI / 180;
+    var dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+  function minutes() { return trip ? Math.max(0, Math.round((Date.now() - trip.startedAt) / 60000)) : 0; }
+
+  function onPosition(p) {
+    if (!trip) return;
+    var c = p.coords;
+    accNow = c.accuracy;
+    tripError = '';
+    // Ignore weak fixes (indoors, tunnels, cold start).
+    if (c.accuracy > 50) { renderTrip(); return; }
+    var pt = { lat: c.latitude, lng: c.longitude, t: p.timestamp };
+    if (!trip.last) { trip.last = pt; renderTrip(); return; }
+    var d = haversine(trip.last, pt);
+    var dt = (pt.t - trip.last.t) / 1000;
+    // Ignore GPS jitter while stopped, and impossible jumps (over 70 m/s, about 150 mph).
+    if (d < Math.max(10, c.accuracy * 0.5)) { renderTrip(); return; }
+    if (dt > 0 && d / dt > 70) { renderTrip(); return; }
+    trip.dist += d;
+    trip.last = pt;
+    saveTrip();
+    syncMilesFromTrip();
+    renderTrip();
+  }
+  function onGeoError(e) {
+    if (e && e.code === 1) {
+      tripError = 'Location is blocked. Allow it for this site in your browser settings, then try again.';
+      stopWatch();
+    } else if (e && e.code === 3) {
+      tripError = 'Waiting for a GPS signal.';
+    } else {
+      tripError = 'Cannot get a location right now.';
+    }
+    renderTrip();
+  }
+  function syncMilesFromTrip() {
+    if (!trip) return;
+    $('miles').value = (trip.dist / METRES_PER_MILE).toFixed(2);
+    tripGps = true;
+    renderReceipt();
+  }
+  function stopWatch() {
+    if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+  }
+  function requestWake() {
+    if (!('wakeLock' in navigator)) return;
+    navigator.wakeLock.request('screen').then(function (l) { wakeLock = l; }, function () {});
+  }
+  function beginWatch() {
+    if (!navigator.geolocation) { tripError = 'This browser has no location support.'; renderTrip(); return; }
+    if (window.isSecureContext === false) { tripError = 'GPS needs HTTPS. Open the hosted https:// address.'; renderTrip(); return; }
+    tripError = ''; accNow = null;
+    watchId = navigator.geolocation.watchPosition(onPosition, onGeoError, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+    requestWake();
+    renderTrip();
+  }
+  function startTrip() {
+    trip = { dist: 0, last: null, startedAt: Date.now() };
+    saveTrip();
+    tripGps = true;
+    $('miles').value = '0.00';
+    renderReceipt();
+    beginWatch();
+  }
+  function resumeTrip() {
+    if (!trip) return;
+    trip.last = null;           // the gap while the page was closed is not counted
+    beginWatch();
+  }
+  function finishTrip() {
+    stopWatch();
+    if (trip) syncMilesFromTrip();
+    trip = null;
+    lsDel(TRIP_KEY);
+    renderTrip();
+    say('toast', 'Trip stopped. Pick who was in the car, then add it.');
+  }
+  function discardTrip() {
+    stopWatch();
+    trip = null; tripGps = false;
+    lsDel(TRIP_KEY);
+    $('miles').value = '';
+    renderReceipt(); renderTrip();
+  }
+  function renderTrip() {
+    var tracking = watchId !== null;
+    var live = $('tripLive'), actions = $('tripActions');
+    $('trip').classList.toggle('on', tracking);
+    if (!trip) {
+      live.hidden = !tripError;
+      $('tripText').textContent = tripError;
+      actions.innerHTML = '<button type="button" class="btn ghost" data-trip="start">Start trip</button>';
+      $('tripHint').hidden = false;
+      return;
+    }
+    live.hidden = false;
+    var mi = (trip.dist / METRES_PER_MILE).toFixed(2);
+    var sig = tripError || (accNow === null ? 'Looking for GPS…' : (accNow > 50 ? 'Weak GPS (±' + Math.round(accNow) + ' m)' : 'GPS ±' + Math.round(accNow) + ' m'));
+    $('tripText').textContent = (tracking ? 'Tracking' : 'Paused') + ' · ' + mi + ' mi · ' + minutes() + ' min · ' + sig;
+    $('tripHint').hidden = !tracking;
+    if (tracking) {
+      actions.innerHTML = '<button type="button" class="btn" data-trip="stop">Stop trip</button>';
+    } else {
+      actions.innerHTML = '<button type="button" class="btn" data-trip="resume">Resume</button>' +
+        '<button type="button" class="link" data-trip="finish">Use ' + mi + ' mi</button>' +
+        '<button type="button" class="link" data-trip="discard">Discard</button>';
+    }
+  }
+  $('tripActions').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-trip]');
+    if (!b) return;
+    var a = b.dataset.trip;
+    if (a === 'start') startTrip();
+    else if (a === 'stop' || a === 'finish') finishTrip();
+    else if (a === 'resume') resumeTrip();
+    else if (a === 'discard') { if (b.dataset.armed === '1') discardTrip(); else { b.dataset.armed = '1'; b.textContent = 'Tap to confirm'; } }
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && watchId !== null && !wakeLock) requestWake();
+    if (document.visibilityState === 'visible') renderTrip();
+  });
+  setInterval(function () { if (watchId !== null) renderTrip(); }, 15000);
+
+  /* ---------- actions ---------- */
+  function addPerson(name) {
+    name = name.trim();
+    if (!name) return null;
+    var existing = state.people.filter(function (p) { return p.name.toLowerCase() === name.toLowerCase(); })[0];
+    if (existing) return existing;
+    var p = { id: uid(), name: name };
+    state.people.push(p);
+    save();
+    return p;
+  }
+
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.tabs button').forEach(function (x) {
+        var on = x === b;
+        x.setAttribute('aria-selected', on);
+        $('p-' + x.dataset.tab).hidden = !on;
+      });
+    });
+  });
+
+  $('car').addEventListener('change', function () { state.carId = this.value; save(); renderCar(); renderReceipt(); });
+  $('newCarBtn').addEventListener('click', function () {
+    $('newCarRow').hidden = !$('newCarRow').hidden;
+    if (!$('newCarRow').hidden) $('newCarName').focus();
+  });
+  $('newCarAdd').addEventListener('click', function () {
+    var name = $('newCarName').value.trim();
+    var mpg = parseFloat($('newCarMpg').value);
+    if (!name || !(mpg > 0)) return;
+    var c = { id: uid(), name: name, mpg: mpg, fuel: car().fuel };
+    state.cars.push(c); state.carId = c.id;
+    $('newCarName').value = ''; $('newCarMpg').value = ''; $('newCarRow').hidden = true;
+    save(); renderCar(); renderReceipt();
+  });
+  document.querySelectorAll('input[name="fuel"]').forEach(function (r) {
+    r.addEventListener('change', function () { if (this.checked) { car().fuel = this.value; save(); renderCar(); renderReceipt(); } });
+  });
+  $('mpg').addEventListener('input', function () {
+    var v = parseFloat(this.value);
+    if (v > 0) { car().mpg = v; saveSoon(); }
+    renderReceipt();
+  });
+  $('price').addEventListener('input', function () {
+    var v = parseFloat(this.value);
+    if (v > 0) { state.prices[car().fuel] = v; saveSoon(); }
+    renderReceipt();
+  });
+  $('useAvg').addEventListener('click', function () {
+    state.prices[car().fuel] = AVG[car().fuel];
+    save(); renderCar(); renderReceipt();
+  });
+  $('miles').addEventListener('input', function () { tripGps = false; renderReceipt(); });
+  ['ret', 'incMe'].forEach(function (id) { $(id).addEventListener('change', renderReceipt); });
+  $('riders').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip');
+    if (!b) return;
+    if (selected.has(b.dataset.id)) selected['delete'](b.dataset.id); else selected.add(b.dataset.id);
+    renderRiders(); renderReceipt();
+  });
+  function submitPerson() {
+    var p = addPerson($('newPerson').value);
+    if (!p) return;
+    selected.add(p.id);
+    $('newPerson').value = '';
+    renderRiders(); renderReceipt(); renderBalances();
+  }
+  $('addPerson').addEventListener('click', submitPerson);
+  $('newPerson').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submitPerson(); } });
+
+  $('addJourney').addEventListener('click', function () {
+    var q = quote();
+    if (watchId !== null) { say('toast', 'Stop the trip first.'); return; }
+    if (!(q.miles > 0)) { say('toast', 'Enter the miles first.'); return; }
+    if (!(q.mpg > 0) || !(q.ppl > 0)) { say('toast', 'Check the mpg and the price per litre in Details.'); return; }
+    if (!q.n) { say('toast', 'Tap who was in the car, or include yourself.'); return; }
+    var s = shares(q), c = car();
+    state.journeys.push({
+      id: uid(), date: $('date').value || today(), label: $('label').value.trim() || 'Journey',
+      miles: q.miles, ret: $('ret').checked, gps: tripGps, carName: c.name, mpg: q.mpg, fuel: c.fuel, ppl: q.ppl,
+      cost: q.cost, inc: q.inc, mine: s.mine, shares: s.map
+    });
+    save();
+    $('miles').value = ''; $('label').value = ''; $('ret').checked = false; tripGps = false;
+    if (trip && watchId === null) { trip = null; lsDel(TRIP_KEY); }
+    say('toast', 'Added. ' + gbp(q.cost) + ' split ' + q.n + (q.n === 1 ? ' way.' : ' ways.'));
+    renderReceipt(); renderBalances(); renderHistory(); renderTrip();
+  });
+
+  $('payBtn').addEventListener('click', function () {
+    var id = $('payPerson').value;
+    var pence = Math.round((parseFloat($('payAmt').value) || 0) * 100);
+    if (!id) { say('payToast', 'Add a person first.', 'pay'); return; }
+    if (pence <= 0) { say('payToast', 'Enter how much they paid.', 'pay'); return; }
+    state.payments.push({ id: uid(), personId: id, amount: pence, date: today(), note: $('payNote').value.trim() });
+    save();
+    $('payAmt').value = ''; $('payNote').value = '';
+    var b = balances()[id], net = b.owed - b.paid;
+    say('payToast', net > 0 ? personName(id) + ' now owes ' + gbp(net) + '.' : net < 0 ? personName(id) + ' is ' + gbp(-net) + ' ahead.' : personName(id) + ' is all settled.', 'pay');
+    renderBalances(); renderHistory();
+  });
+
+  function armed(btn, label) {
+    if (btn.dataset.armed === '1') return true;
+    btn.dataset.armed = '1';
+    var old = btn.textContent;
+    btn.textContent = label;
+    setTimeout(function () { if (btn.isConnected) { btn.dataset.armed = ''; btn.textContent = old; } }, 3000);
+    return false;
+  }
+  $('people').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act="settle"]');
+    if (!b || !armed(b, 'Tap to confirm')) return;
+    var bal = balances()[b.dataset.id], net = bal.owed - bal.paid;
+    if (net > 0) {
+      state.payments.push({ id: uid(), personId: b.dataset.id, amount: net, date: today(), note: 'Settled up' });
+      save(); renderBalances(); renderHistory();
+    }
+  });
+  $('jList').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act="del-journey"]');
+    if (!b || !armed(b, 'Tap to confirm')) return;
+    state.journeys = state.journeys.filter(function (j) { return j.id !== b.dataset.id; });
+    save(); renderBalances(); renderHistory();
+  });
+  $('pList').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act="del-payment"]');
+    if (!b || !armed(b, 'Tap to confirm')) return;
+    state.payments = state.payments.filter(function (p) { return p.id !== b.dataset.id; });
+    save(); renderBalances(); renderHistory();
+  });
+
+  /* ---------- backup ---------- */
+  $('exportBtn').addEventListener('click', function () {
+    var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'fuel-split-backup-' + today() + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    say('backupStatus', 'Backup downloaded.');
+  });
+  $('importBtn').addEventListener('click', function () { $('importFile').click(); });
+  $('importFile').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var d = JSON.parse(r.result);
+        if (!d || !Array.isArray(d.people) || !Array.isArray(d.journeys)) throw new Error('bad');
+        state = normalize(d); save(); renderAll();
+        say('backupStatus', 'Backup restored.');
+      } catch (e) { say('backupStatus', 'That file is not a Fuel Split backup.'); }
+    };
+    r.readAsText(f);
+    this.value = '';
+  });
+
+  /* ---------- optional live price ---------- */
+  function fetchPrices() {
+    if (!PRICE_URL) return;
+    fetch(PRICE_URL).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.petrol > 0) AVG.petrol = d.petrol;
+      if (d && d.diesel > 0) AVG.diesel = d.diesel;
+      if (d && d.asOf) AVG_DATE = d.asOf;
+      renderCar();
+    }).catch(function () {});
+  }
+
+  /* ---------- start ---------- */
+  $('date').value = today();
+  trip = loadTrip();
+  if (trip) { tripGps = true; $('miles').value = (trip.dist / METRES_PER_MILE).toFixed(2); }
+  renderAll();
+  fetchPrices();
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
